@@ -45,16 +45,37 @@ class Version extends Eloquent
      * Return the versioned model
      * @return Model
      */
-    public function getModel()
+    public function getModel($related = [])
     {
+        $data = $this->getUnserializedData();
+        $related = $this->extractRelatedData($data, $related);
+
         $model = new $this->versionable_type();
         $model->unguard();
-        $model->fill(unserialize($this->model_data));
+        $model->fill($data);
         $model->exists = true;
         $model->reguard();
         return $model;
     }
 
+    /**
+     * Return unserialized model_data of this version
+     * @return  array
+     */
+    public function getUnserializedData()
+    {
+        return unserialize($this->model_data);
+    }
+
+    public function extractRelatedData(&$data, $with)
+    {
+        $related = [];
+        foreach ($with as $relation) {
+            $related[$relation] = $data[$relation];
+            unset( $data[$relation] );
+        }
+        return $related;
+    }
 
     /**
      * Revert to the stored model version make it the current version

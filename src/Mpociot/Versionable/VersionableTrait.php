@@ -125,6 +125,22 @@ trait VersionableTrait
     }
 
     /**
+     * Get a specific data based on the version id
+     *
+     * @param $version_id
+     *
+     * @return array | null;
+     */
+    public function getVersionData($version_id)
+    {
+        $version = $this->versions()->where("version_id", "=", $version_id)->first();
+        if (!is_null($version)) {
+            return $version->getUnserializedData();
+        }
+        return null;
+    }
+
+    /**
      * Pre save hook to determine if versioning is enabled and if we're updating
      * the model
      * @return void
@@ -155,7 +171,7 @@ trait VersionableTrait
             $version->versionable_id   = $this->getKey();
             $version->versionable_type = get_class($this);
             $version->user_id          = $this->getAuthUserId();
-            $version->model_data       = serialize($this->toArray());
+            $version->model_data       = $this->getSerializedData();
 
             if (!empty( $this->reason )) {
                 $version->reason = $this->reason;
@@ -193,5 +209,71 @@ trait VersionableTrait
         return null;
     }
 
+    /**
+     * Return serialized data including those in the underlying relation
+     * specified in the $with property.
+     *
+     * @return string
+     */
+    protected function getSerializedData()
+    {
+        $data = $this->getAttributes();
 
+        if (count($this->with) > 0) {
+            foreach ($this->with as $relation) {
+                $attach = [];
+                foreach ($this->{$relation} as $item) {
+                    $attach[] = $item->getAttributes();
+                }
+                $data[$relation] = $attach;
+            }
+        }
+
+        return serialize($data);
+    }
+
+    /**
+     * Override Eloquent isDirty() to also check if the attribute
+     * in the underlying relation also isDirty().
+     *
+     * @param  array|string|null  $attributes
+     * @return bool
+     */
+    public function isDirty($attributes = null)
+    {
+        if (parent::isDirty($attributes)) {
+            return true;
+        }
+
+        foreach ($this->with as $relation) {
+            foreach ($this->{$relation} as $item) {
+                if ($item->isDirty()) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Override Eloquent getDirty() to also get dirty attributes
+     * from the underlying relation.
+     *
+     * @return array
+     */
+    public function getDirty()
+    {
+        $dirty = parent::getDirty();
+
+        foreach ($this->with as $relation) {
+            foreach ($this->{$relation} as $item) {
+                if ( ! empty($itemDirty = $item->getDirty())) {
+                    $dirty[$relation] = $itemDirty;
+                }
+            }
+        }
+
+        return $dirty;
+    }
 }
